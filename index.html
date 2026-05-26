@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Versionado no Git em 26-05-2026 - P1: merge Cobrancas em Financeiro, Pipeline dentro de Clientes, tabs em Configuracoes -->
+<!-- Versionado no Git em 26-05-2026 - P2: fix mapeamento snake_case do Supabase pro formato do app (resolve 120 despesas importadas em branco) -->
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8"/>
@@ -690,12 +690,26 @@ async function sbLoadStateV2(token){
     sbFetch('/rest/v1/recorrencias?'+q,{},token),
     sbFetch('/rest/v1/config?chave=eq.main&select=valor',{},token),
   ]);
-  const pick=r=>(r&&r.extra&&typeof r.extra==='object'&&Object.keys(r.extra).length)?r.extra:r;
+  const pickTx=r=>{
+    if(!r)return r;
+    if(r.extra&&typeof r.extra==='object'&&Object.keys(r.extra).length)return r.extra;
+    return {...r,desc:r.descricao,cat:r.categoria,cid:r.cliente_id,formaPagamento:r.forma_pagamento};
+  };
+  const pickLead=r=>{
+    if(!r)return r;
+    if(r.extra&&typeof r.extra==='object'&&Object.keys(r.extra).length)return r.extra;
+    return {...r,valorEstimado:r.valor_estimado,motivoPerda:r.motivo_perda,motivoPerdaDetalhe:r.motivo_perda_detalhe,clienteGeradoId:r.cliente_gerado_id,dataConversao:r.data_conversao,etapa:r.status};
+  };
+  const pickRec=r=>{
+    if(!r)return r;
+    if(r.extra&&typeof r.extra==='object'&&Object.keys(r.extra).length)return r.extra;
+    return {...r,desc:r.descricao,cat:r.categoria,diaVenc:r.dia_vencimento};
+  };
   return {
     clientes:(cli||[]).map(fromCliente),
-    transacoes:(tx||[]).map(pick),
-    leads:(ld||[]).map(pick),
-    recorrencias:(rc||[]).map(pick),
+    transacoes:(tx||[]).map(pickTx),
+    leads:(ld||[]).map(pickLead),
+    recorrencias:(rc||[]).map(pickRec),
     config:(cf&&cf[0]&&cf[0].valor)||null,
   };
 }
