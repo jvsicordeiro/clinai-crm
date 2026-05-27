@@ -1286,7 +1286,7 @@ function App({initialData,session,onLogout}){
   // ========== FINANCEIRO (com tab Cobrancas) ==========
   const Fin=()=>{
     const[selectedIds,setSelectedIds]=useState(new Set());
-    const clienteNomeById=useMemo(()=>{const m={};(data.clientes||[]).forEach(c=>{m[c.id]=c.nome});return m},[data.clientes]);
+    const clienteNomeById=useMemo(()=>{const m={};(data?.clientes||[]).forEach(c=>{if(c&&c.id)m[c.id]=c.nome||''});return m},[data?.clientes]);
     const categoriaColor=cat=>{
       if(!cat)return{bg:'var(--bd-light)',fg:tM};
       const c=cat.toLowerCase();
@@ -1299,18 +1299,19 @@ function App({initialData,session,onLogout}){
     };
     const CatChip=({cat})=>{if(!cat)return<span style={{color:tM,fontSize:'0.72rem'}}>-</span>;const cc=categoriaColor(cat);return<span style={{display:'inline-block',padding:'3px 9px',borderRadius:12,fontSize:'0.65rem',fontWeight:600,background:cc.bg,color:cc.fg}}>{cat}</span>};
     // === Visao geral ===
-    const mesTx=data.transacoes.filter(t=>t.data?.startsWith(sK));
-    const recSum=mesTx.filter(t=>t.tipo==='receita'&&t.status==='pago').reduce((a,t)=>a+t.valor,0);
-    const despSum=mesTx.filter(t=>t.tipo==='despesa'&&t.status==='pago').reduce((a,t)=>a+t.valor,0);
+    const allTx=(data&&Array.isArray(data.transacoes))?data.transacoes:[];
+    const mesTx=allTx.filter(t=>t&&t.data?.startsWith(sK));
+    const recSum=mesTx.filter(t=>t.tipo==='receita'&&t.status==='pago').reduce((a,t)=>a+(+t.valor||0),0);
+    const despSum=mesTx.filter(t=>t.tipo==='despesa'&&t.status==='pago').reduce((a,t)=>a+(+t.valor||0),0);
     const saldo=recSum-despSum;
-    const recPend=mesTx.filter(t=>t.tipo==='receita'&&t.status==='pendente').reduce((a,t)=>a+t.valor,0);
-    const despPend=mesTx.filter(t=>t.tipo==='despesa'&&t.status==='pendente').reduce((a,t)=>a+t.valor,0);
+    const recPend=mesTx.filter(t=>t.tipo==='receita'&&t.status==='pendente').reduce((a,t)=>a+(+t.valor||0),0);
+    const despPend=mesTx.filter(t=>t.tipo==='despesa'&&t.status==='pendente').reduce((a,t)=>a+(+t.valor||0),0);
     const hist=Array.from({length:6},(_,i)=>{
       const d=new Date(sY,sM-1-5+i,1);
       const key=mk(d.getFullYear(),d.getMonth()+1);
-      const mtx=data.transacoes.filter(t=>t.data?.startsWith(key));
-      const r=mtx.filter(t=>t.tipo==='receita'&&t.status==='pago').reduce((a,t)=>a+t.valor,0);
-      const de=mtx.filter(t=>t.tipo==='despesa'&&t.status==='pago').reduce((a,t)=>a+t.valor,0);
+      const mtx=allTx.filter(t=>t&&t.data?.startsWith(key));
+      const r=mtx.filter(t=>t.tipo==='receita'&&t.status==='pago').reduce((a,t)=>a+(+t.valor||0),0);
+      const de=mtx.filter(t=>t.tipo==='despesa'&&t.status==='pago').reduce((a,t)=>a+(+t.valor||0),0);
       return{r,de,s:r-de};
     });
     const recPts=hist.map(h=>h.r);
@@ -1323,17 +1324,17 @@ function App({initialData,session,onLogout}){
     const prevY=sM===1?sY-1:sY;
     const prevM=sM===1?12:sM-1;
     const prevK=mk(prevY,prevM);
-    const prevTx=data.transacoes.filter(t=>t.data?.startsWith(prevK));
-    const recSumP=prevTx.filter(t=>t.tipo==='receita'&&t.status==='pago').reduce((a,t)=>a+t.valor,0);
-    const despSumP=prevTx.filter(t=>t.tipo==='despesa'&&t.status==='pago').reduce((a,t)=>a+t.valor,0);
-    const recPendP=prevTx.filter(t=>t.tipo==='receita'&&t.status==='pendente').reduce((a,t)=>a+t.valor,0);
-    const despPendP=prevTx.filter(t=>t.tipo==='despesa'&&t.status==='pendente').reduce((a,t)=>a+t.valor,0);
+    const prevTx=allTx.filter(t=>t&&t.data?.startsWith(prevK));
+    const recSumP=prevTx.filter(t=>t.tipo==='receita'&&t.status==='pago').reduce((a,t)=>a+(+t.valor||0),0);
+    const despSumP=prevTx.filter(t=>t.tipo==='despesa'&&t.status==='pago').reduce((a,t)=>a+(+t.valor||0),0);
+    const recPendP=prevTx.filter(t=>t.tipo==='receita'&&t.status==='pendente').reduce((a,t)=>a+(+t.valor||0),0);
+    const despPendP=prevTx.filter(t=>t.tipo==='despesa'&&t.status==='pendente').reduce((a,t)=>a+(+t.valor||0),0);
     const recTotP=recSumP+recPendP;
     const despTotP=despSumP+despPendP;
     const saldoP=recSumP-despSumP;
     const lucroP=recTotP-despTotP;
     const prevLb=ml(prevY,prevM).slice(0,3).toLowerCase()+'/'+String(prevY).slice(2);
-    const noPriorData=prevTx.length===0;
+    const noPriorData=(prevTx||[]).length===0;
     const cmpLine=(cur,prv,goodIfUp)=>{
       if(noPriorData)return null;
       const diff=cur-prv;
@@ -1348,11 +1349,12 @@ function App({initialData,session,onLogout}){
     const saldoColor=saldo>0?g:saldo<0?er:tM;
     const FKpi=({lb,val,sub,cmp,color,pts,valColor})=>(<div style={{...$.kpi(color),display:'flex',flexDirection:'column',gap:4,minHeight:108}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}><div style={{...$.kl,fontSize:'0.6rem'}}>{lb}</div>{pts&&<Sparkline pts={pts} color={color}/>}</div><div style={{...$.kv,fontSize:'1.25rem',lineHeight:1.1,color:valColor||undefined}}>{val}</div><div style={{marginTop:'auto',display:'flex',flexDirection:'column',gap:2,fontSize:'0.6rem'}}>{typeof sub==='string'?<span style={{color:tM}}>{sub}</span>:sub}{cmp&&<span style={{fontSize:'0.58rem'}}>{cmp}</span>}</div></div>);
     // === Filtro categoria + ordenacao Visao ===
-    const catsMes=Array.from(new Set(fTx.map(t=>t.cat).filter(Boolean))).sort();
-    let listV=fCat==='todas'?fTx:fTx.filter(t=>t.cat===fCat);
+    const fTxSafe=Array.isArray(fTx)?fTx.filter(Boolean):[];
+    const catsMes=Array.from(new Set(fTxSafe.map(t=>t.cat).filter(Boolean))).sort();
+    let listV=fCat==='todas'?fTxSafe:fTxSafe.filter(t=>t.cat===fCat);
     const sortKey={data:t=>t.data||'',cat:t=>(t.cat||'').toLowerCase(),desc:t=>(t.desc||'').toLowerCase(),valor:t=>t.valor||0,status:t=>t.status||''}[sortBy]||(t=>t.data||'');
     listV=[...listV].sort((a,b)=>{const ka=sortKey(a),kb=sortKey(b);if(ka<kb)return sortDir==='asc'?-1:1;if(ka>kb)return sortDir==='asc'?1:-1;return 0});
-    const totalFiltrado=listV.reduce((a,t)=>a+(t.tipo==='despesa'?-t.valor:t.valor),0);
+    const totalFiltrado=listV.reduce((a,t)=>a+(t.tipo==='despesa'?-(+t.valor||0):(+t.valor||0)),0);
     const sortClick=k=>{if(sortBy===k)setSortDir(sortDir==='asc'?'desc':'asc');else{setSortBy(k);setSortDir(k==='data'||k==='valor'?'desc':'asc')}};
     const sortArrow=k=>sortBy===k?(sortDir==='asc'?' ↑':' ↓'):'';
     // === Cobrancas ===
@@ -1382,12 +1384,12 @@ function App({initialData,session,onLogout}){
     const CKpi=({lb,val,sub,subColor,delta,pts,color})=>(<div style={{...$.kpi(color),display:'flex',flexDirection:'column',gap:4,minHeight:90}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}><div style={{...$.kl,fontSize:'0.6rem'}}>{lb}</div>{pts&&<Sparkline pts={pts} color={color}/>}</div><div style={{...$.kv,fontSize:'1.25rem',lineHeight:1.1}}>{val}</div><div style={{marginTop:'auto',display:'flex',alignItems:'center',gap:6,fontSize:'0.6rem',flexWrap:'wrap'}}>{delta!==null&&delta!==undefined&&<span style={{fontWeight:700,color:delta>=0?g:er}}>{delta>=0?'▲':'▼'} {Math.abs(delta).toFixed(0)}%</span>}<span style={{color:subColor||tM}}>{sub}</span></div></div>);
     const goVisao=()=>{setFinTab('visao');setSr('');setFi('todos');setFT('todos');setFCat('todas');setSelectedIds(new Set())};
     const goCob=()=>{setFinTab('cobrancas');setSr('');setFi('todos');setFT('todos');setFCat('todas');setSelectedIds(new Set())};
-    const hasForma=listV.some(t=>t.formaPagamento&&t.formaPagamento!=='-'&&t.formaPagamento!=='');
-    const hasCliente=listV.some(t=>t.cid);
-    const hasAnexo=listV.some(t=>t.anexoUrl);
-    const recorrenciasAtivas=(data.recorrencias||[]).filter(r=>r.ativo);
-    const recorrenciasJaGeradas=mesTx.some(t=>t.origem==='recorrencia');
-    const allListIds=listV.map(t=>t.id);
+    const hasForma=(listV||[]).some(t=>t&&t.formaPagamento&&t.formaPagamento!=='-'&&t.formaPagamento!=='');
+    const hasCliente=(listV||[]).some(t=>t&&t.cid);
+    const hasAnexo=(listV||[]).some(t=>t&&t.anexoUrl);
+    const recorrenciasAtivas=(data&&Array.isArray(data.recorrencias)?data.recorrencias:[]).filter(r=>r&&r.ativo);
+    const recorrenciasJaGeradas=(mesTx||[]).some(t=>t&&t.origem==='recorrencia');
+    const allListIds=(listV||[]).map(t=>t&&t.id).filter(Boolean);
     const allSelected=allListIds.length>0&&allListIds.every(id=>selectedIds.has(id));
     const toggleAll=()=>{if(allSelected)setSelectedIds(new Set());else setSelectedIds(new Set(allListIds))};
     const toggleOne=id=>{const n=new Set(selectedIds);if(n.has(id))n.delete(id);else n.add(id);setSelectedIds(n)};
