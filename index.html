@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Versionado no Git em 27-05-2026 - P2-financeiro: 11 ajustes na Visao geral (header, KPIs comparativos, filtro categoria, ordenacao, forma pagamento, total filtrado) -->
+<!-- Versionado no Git em 27-05-2026 - P2-financeiro v2: 12 melhorias (cores semanticas, filtros consolidados, sparklines, cliente, anexo, vencimento vs pagamento, bulk actions, recorrencias inteligentes) -->
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8"/>
@@ -250,7 +250,7 @@ function initials(nome){if(!nome)return '?';const p=nome.trim().split(/\s+/);ret
 function avatarColor(nome){const palette=[['var(--av-blue)','var(--av-blue2)','var(--av-blue-fg)'],['var(--success-bg)','var(--success-bg2)','var(--success-fg)'],['var(--alert-warm2)','var(--warn-bg2)','var(--av-amber-fg)'],['var(--av-pink)','var(--av-pink2)','var(--av-pink-fg)'],['var(--purple-bg)','var(--purple-bg2)','var(--purple-fg)'],['var(--av-teal)','var(--av-teal2)','var(--av-teal-fg)'],['var(--av-rose)','var(--av-rose2)','var(--rose-dark)'],['var(--info-bg2)','var(--info-bg3)','var(--info-fg)'],['var(--alert-warm2)','var(--warn-bg2)','var(--av-amber2-fg)'],['var(--success-bg)','var(--success-bg2)','var(--av-green2-fg)']];let h=0;for(let i=0;i<(nome||'').length;i++)h=((h<<5)-h+nome.charCodeAt(i))|0;return palette[Math.abs(h)%palette.length]}
 function saudacao(){const h=new Date().getHours();return h<12?'Bom dia':h<18?'Boa tarde':'Boa noite'}
 function dataHoje(){return new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}
-function Sparkline({pts,color,w=72,h=24}){if(!pts||pts.length<2)return null;const max=Math.max(...pts,1);const min=Math.min(...pts,0);const range=max-min||1;const step=w/(pts.length-1);const coords=pts.map((v,i)=>[i*step,h-((v-min)/range)*(h-2)-1]);const d=coords.map((c,i)=>`${i===0?'M':'L'}${c[0].toFixed(1)},${c[1].toFixed(1)}`).join(' ');const area=d+` L${w},${h} L0,${h} Z`;const lastX=coords[coords.length-1][0];const lastY=coords[coords.length-1][1];return(<svg width={w} height={h} style={{display:'block',overflow:'visible'}}><path d={area} fill={color} fillOpacity="0.12"/><path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx={lastX} cy={lastY} r="2.2" fill={color}/></svg>)}
+function Sparkline({pts,color,w=72,h=24}){const enough=pts&&pts.length>=2&&pts.some(v=>v!==0);if(!enough)return(<svg width={w} height={h} style={{display:'block',overflow:'visible',opacity:0.35}}><line x1="0" y1={h-3} x2={w} y2={h-3} stroke={color} strokeWidth="1.5" strokeDasharray="3 3" strokeLinecap="round"/></svg>);const max=Math.max(...pts,1);const min=Math.min(...pts,0);const range=max-min||1;const step=w/(pts.length-1);const coords=pts.map((v,i)=>[i*step,h-((v-min)/range)*(h-2)-1]);const d=coords.map((c,i)=>`${i===0?'M':'L'}${c[0].toFixed(1)},${c[1].toFixed(1)}`).join(' ');const area=d+` L${w},${h} L0,${h} Z`;const lastX=coords[coords.length-1][0];const lastY=coords[coords.length-1][1];return(<svg width={w} height={h} style={{display:'block',overflow:'visible'}}><path d={area} fill={color} fillOpacity="0.12"/><path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx={lastX} cy={lastY} r="2.2" fill={color}/></svg>)}
 function norm(s){return(s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')}
 function calcSaude(cli,txs,maxMrr){
   // Pagamento: 6m, -15 por atraso, -25 por pendente vencido, -10 por pago>5d atraso
@@ -575,6 +575,8 @@ const $={
   badge:st=>{const c=sc[st]||sc.cancelado;return{display:'inline-block',padding:'2px 8px',borderRadius:12,fontSize:'0.65rem',fontWeight:600,background:c.bg,color:c.fg}},
   btn:{display:'inline-flex',alignItems:'center',gap:5,padding:'8px 14px',borderRadius:8,fontSize:'0.78rem',fontWeight:600,cursor:'pointer',border:`1px solid ${bd}`,background:'var(--surface)',color:'var(--text)'},
   btnP:{display:'inline-flex',alignItems:'center',gap:5,padding:'8px 14px',borderRadius:8,fontSize:'0.78rem',fontWeight:600,cursor:'pointer',border:`1px solid ${g}`,background:g,color:'white'},
+  btnDg:{display:'inline-flex',alignItems:'center',gap:5,padding:'8px 14px',borderRadius:8,fontSize:'0.78rem',fontWeight:600,cursor:'pointer',border:`1px solid ${er}`,background:er,color:'white'},
+  btnSec:{display:'inline-flex',alignItems:'center',gap:5,padding:'7px 12px',borderRadius:8,fontSize:'0.72rem',fontWeight:500,cursor:'pointer',border:`1px solid ${bd}`,background:'transparent',color:tL},
   btnD:{display:'inline-flex',alignItems:'center',gap:4,padding:'6px 10px',borderRadius:8,fontSize:'0.72rem',fontWeight:600,cursor:'pointer',border:'none',background:eB,color:er},
   btnS:{display:'inline-flex',alignItems:'center',gap:3,padding:'5px 8px',borderRadius:6,fontSize:'0.7rem',fontWeight:500,cursor:'pointer',border:`1px solid ${bd}`,background:'transparent',color:tL},
   inp:{width:'100%',padding:'9px 12px',border:`1px solid ${bd}`,borderRadius:8,fontSize:'0.82rem',fontFamily:'inherit',background:'var(--bg)',color:'var(--text)'},
@@ -692,8 +694,9 @@ async function sbLoadStateV2(token){
   ]);
   const pickTx=r=>{
     if(!r)return r;
-    if(r.extra&&typeof r.extra==='object'&&Object.keys(r.extra).length)return r.extra;
-    return {...r,desc:r.descricao,cat:r.categoria,cid:r.cliente_id,formaPagamento:r.forma_pagamento};
+    const overlay={anexoUrl:r.anexo_url||null,dataPagamento:r.data_pagamento||null};
+    if(r.extra&&typeof r.extra==='object'&&Object.keys(r.extra).length)return {...r.extra,...overlay};
+    return {...r,desc:r.descricao,cat:r.categoria,cid:r.cliente_id,formaPagamento:r.forma_pagamento,...overlay};
   };
   const pickLead=r=>{
     if(!r)return r;
@@ -757,7 +760,7 @@ function rowCliente(c){
     observacoes:c.observacoes||c.notas||null,
   };
 }
-function rowTx(t){return{id:String(t.id),tipo:t.tipo||'despesa',descricao:t.descricao||t.desc||'-',valor:Number(t.valor||0),data:t.data||new Date().toISOString().slice(0,10),categoria:t.categoria||t.cat||null,cliente_id:t.clienteId?String(t.clienteId):null,forma_pagamento:t.formaPagamento||null,status:t.status||'pago',origem:t.origem||null,extra:t}}
+function rowTx(t){return{id:String(t.id),tipo:t.tipo||'despesa',descricao:t.descricao||t.desc||'-',valor:Number(t.valor||0),data:t.data||new Date().toISOString().slice(0,10),categoria:t.categoria||t.cat||null,cliente_id:t.cid?String(t.cid):(t.clienteId?String(t.clienteId):null),forma_pagamento:t.formaPagamento||null,status:t.status||'pago',origem:t.origem||null,anexo_url:t.anexoUrl||null,data_pagamento:t.dataPagamento||null,extra:t}}
 function rowLead(l){return{id:String(l.id),nome:l.nome||'-',origem:l.origem||null,status:l.status||l.etapa||'novo',valor_estimado:Number(l.valorEstimado||l.valorPotencial||0)||null,motivo_perda:l.motivoPerda||l.motivo_perda||null,motivo_perda_detalhe:l.motivoPerdaDetalhe||l.motivo_perda_detalhe||null,cliente_gerado_id:l.clienteGeradoId||l.cliente_gerado_id||null,data_conversao:l.dataConversao||l.data_conversao||null,extra:l}}
 function rowRec(r){return{id:String(r.id),tipo:r.tipo||'despesa',descricao:r.descricao||'-',valor:Number(r.valor||0),dia_vencimento:r.diaVencimento||null,categoria:r.categoria||null,ativo:r.ativo!==false,extra:r}}
 function diffArr(nov,vel){
@@ -1083,7 +1086,7 @@ function App({initialData,session,onLogout}){
   const cobrarLote=lista=>{const validos=lista.filter(c=>(c.wpp||'').replace(/\D/g,''));if(validos.length===0){showT('Nenhum cliente com WhatsApp');return}if(!window.confirm(`Abrir ${validos.length} abas de cobrança no WhatsApp?`))return;validos.forEach((c,i)=>{setTimeout(()=>cobrar(c),i*600)});showT(`Abrindo ${validos.length} cobranças...`)};
   const anotarPromessa=cid=>{const cli=data.clientes.find(c=>c.id===cid);if(!cli)return;const atual=cli.promessaPgto||'';const nova=window.prompt(`Promessa de pagamento de ${cli.nome.split(' ')[0]}\n\nData (YYYY-MM-DD) ou vazio pra limpar:`,atual||today());if(nova===null)return;if(nova&&!/^\d{4}-\d{2}-\d{2}$/.test(nova)){showT('Formato inválido');return}setData(p=>({...p,clientes:p.clientes.map(c=>c.id===cid?{...c,promessaPgto:nova||''}:c)}));showT(nova?`Promessa: ${fd(nova)}`:'Promessa removida')};
 
-  function gerarRecorrencias(){const recs=data.recorrencias||[];const ativas=recs.filter(r=>r.ativo);const cliAt=data.clientes.filter(c=>c.status==='ativo');let novas=[];const mL=ml(sY,sM).slice(0,3);const aL=String(sY).slice(2);ativas.forEach(r=>{const jE=data.transacoes.some(t=>t.data?.startsWith(sK)&&t.desc===`${r.desc} - ${mL}/${aL}`);if(!jE)novas.push({id:gid(),tipo:'despesa',cat:r.cat,desc:`${r.desc} - ${mL}/${aL}`,valor:r.valor,data:`${sK}-${String(Math.min(r.diaVenc,28)).padStart(2,'0')}`,cid:null,status:'pendente'})});cliAt.forEach(c=>{const nm=c.nome.split(' ').slice(0,2).join(' ');const jE=data.transacoes.some(t=>t.data?.startsWith(sK)&&t.cid===c.id&&t.cat==='Mensalidade');if(!jE)novas.push({id:gid(),tipo:'receita',cat:'Mensalidade',desc:`${nm} - ${mL}/${aL}`,valor:c.valor,data:`${sK}-${String(Math.min(c.diaVenc||5,28)).padStart(2,'0')}`,cid:c.id,status:'pendente'})});if(novas.length===0){showT('Transações já geradas para este mês');return}setData(p=>({...p,transacoes:[...novas,...p.transacoes]}));showT(`${novas.length} transações geradas`)}
+  function gerarRecorrencias(){const recs=data.recorrencias||[];const ativas=recs.filter(r=>r.ativo);const cliAt=data.clientes.filter(c=>c.status==='ativo');let novas=[];const mL=ml(sY,sM).slice(0,3);const aL=String(sY).slice(2);ativas.forEach(r=>{const jE=data.transacoes.some(t=>t.data?.startsWith(sK)&&t.desc===`${r.desc} - ${mL}/${aL}`);if(!jE)novas.push({id:gid(),tipo:'despesa',cat:r.cat,desc:`${r.desc} - ${mL}/${aL}`,valor:r.valor,data:`${sK}-${String(Math.min(r.diaVenc,28)).padStart(2,'0')}`,cid:null,status:'pendente',origem:'recorrencia'})});cliAt.forEach(c=>{const nm=c.nome.split(' ').slice(0,2).join(' ');const jE=data.transacoes.some(t=>t.data?.startsWith(sK)&&t.cid===c.id&&t.cat==='Mensalidade');if(!jE)novas.push({id:gid(),tipo:'receita',cat:'Mensalidade',desc:`${nm} - ${mL}/${aL}`,valor:c.valor,data:`${sK}-${String(Math.min(c.diaVenc||5,28)).padStart(2,'0')}`,cid:c.id,status:'pendente',origem:'recorrencia'})});if(novas.length===0){showT('Transações já geradas para este mês');return}setData(p=>({...p,transacoes:[...novas,...p.transacoes]}));showT(`${novas.length} transações geradas`)}
 
   const maxMrr=useMemo(()=>Math.max(1,...data.clientes.filter(c=>c.status==='ativo').map(c=>c.valor||0)),[data.clientes]);
   const saudeMap=useMemo(()=>{const m={};data.clientes.forEach(c=>{m[c.id]=calcSaude(c,data.transacoes,maxMrr)});return m},[data.clientes,data.transacoes,maxMrr]);
@@ -1282,6 +1285,19 @@ function App({initialData,session,onLogout}){
 
   // ========== FINANCEIRO (com tab Cobrancas) ==========
   const Fin=()=>{
+    const[selectedIds,setSelectedIds]=useState(new Set());
+    const clienteNomeById=useMemo(()=>{const m={};(data.clientes||[]).forEach(c=>{m[c.id]=c.nome});return m},[data.clientes]);
+    const categoriaColor=cat=>{
+      if(!cat)return{bg:'var(--bd-light)',fg:tM};
+      const c=cat.toLowerCase();
+      if(c.includes('infra'))return{bg:'rgba(60,130,200,0.16)',fg:'#1e5a96'};
+      if(c.includes('software'))return{bg:'rgba(140,90,200,0.16)',fg:'#5a2f9c'};
+      if(c.includes('marketing'))return{bg:'rgba(210,90,150,0.16)',fg:'#9c2f6a'};
+      if(c.includes('contab')||c.includes('contáb'))return{bg:'rgba(220,160,40,0.18)',fg:'#946100'};
+      if(c.includes('mensalidade'))return{bg:'rgba(50,150,90,0.16)',fg:'#1f7d4c'};
+      return{bg:'var(--bd-light)',fg:tL};
+    };
+    const CatChip=({cat})=>{if(!cat)return<span style={{color:tM,fontSize:'0.72rem'}}>-</span>;const cc=categoriaColor(cat);return<span style={{display:'inline-block',padding:'3px 9px',borderRadius:12,fontSize:'0.65rem',fontWeight:600,background:cc.bg,color:cc.fg}}>{cat}</span>};
     // === Visao geral ===
     const mesTx=data.transacoes.filter(t=>t.data?.startsWith(sK));
     const recSum=mesTx.filter(t=>t.tipo==='receita'&&t.status==='pago').reduce((a,t)=>a+t.valor,0);
@@ -1317,8 +1333,9 @@ function App({initialData,session,onLogout}){
     const saldoP=recSumP-despSumP;
     const lucroP=recTotP-despTotP;
     const prevLb=ml(prevY,prevM).slice(0,3).toLowerCase()+'/'+String(prevY).slice(2);
+    const noPriorData=prevTx.length===0;
     const cmpLine=(cur,prv,goodIfUp)=>{
-      if(prevTx.length===0)return <span style={{color:tM}}>primeiro mes com dados</span>;
+      if(noPriorData)return null;
       const diff=cur-prv;
       if(diff===0&&prv===0)return <span style={{color:tM}}>sem variacao</span>;
       const pct=prv!==0?(diff/Math.abs(prv)*100):null;
@@ -1327,7 +1344,7 @@ function App({initialData,session,onLogout}){
       const sign=up?'+':'-';
       return <span style={{color,fontWeight:600}}>vs {prevLb}: {sign}{fc(Math.abs(diff))}{pct!==null?` (${sign}${Math.abs(pct).toFixed(0)}%)`:''}</span>;
     };
-    const saldoSub=saldo>0?'no azul':saldo<0?'no vermelho':'neutro';
+    const saldoSub=saldo>0?<span style={{color:g,fontWeight:600}}>no azul</span>:saldo<0?<span style={{color:er,fontWeight:600}}>no vermelho</span>:null;
     const saldoColor=saldo>0?g:saldo<0?er:tM;
     const FKpi=({lb,val,sub,cmp,color,pts,valColor})=>(<div style={{...$.kpi(color),display:'flex',flexDirection:'column',gap:4,minHeight:108}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}><div style={{...$.kl,fontSize:'0.6rem'}}>{lb}</div>{pts&&<Sparkline pts={pts} color={color}/>}</div><div style={{...$.kv,fontSize:'1.25rem',lineHeight:1.1,color:valColor||undefined}}>{val}</div><div style={{marginTop:'auto',display:'flex',flexDirection:'column',gap:2,fontSize:'0.6rem'}}>{typeof sub==='string'?<span style={{color:tM}}>{sub}</span>:sub}{cmp&&<span style={{fontSize:'0.58rem'}}>{cmp}</span>}</div></div>);
     // === Filtro categoria + ordenacao Visao ===
@@ -1363,8 +1380,21 @@ function App({initialData,session,onLogout}){
       return true;
     });
     const CKpi=({lb,val,sub,subColor,delta,pts,color})=>(<div style={{...$.kpi(color),display:'flex',flexDirection:'column',gap:4,minHeight:90}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}><div style={{...$.kl,fontSize:'0.6rem'}}>{lb}</div>{pts&&<Sparkline pts={pts} color={color}/>}</div><div style={{...$.kv,fontSize:'1.25rem',lineHeight:1.1}}>{val}</div><div style={{marginTop:'auto',display:'flex',alignItems:'center',gap:6,fontSize:'0.6rem',flexWrap:'wrap'}}>{delta!==null&&delta!==undefined&&<span style={{fontWeight:700,color:delta>=0?g:er}}>{delta>=0?'▲':'▼'} {Math.abs(delta).toFixed(0)}%</span>}<span style={{color:subColor||tM}}>{sub}</span></div></div>);
-    const goVisao=()=>{setFinTab('visao');setSr('');setFi('todos');setFT('todos');setFCat('todas')};
-    const goCob=()=>{setFinTab('cobrancas');setSr('');setFi('todos');setFT('todos');setFCat('todas')};
+    const goVisao=()=>{setFinTab('visao');setSr('');setFi('todos');setFT('todos');setFCat('todas');setSelectedIds(new Set())};
+    const goCob=()=>{setFinTab('cobrancas');setSr('');setFi('todos');setFT('todos');setFCat('todas');setSelectedIds(new Set())};
+    const hasForma=listV.some(t=>t.formaPagamento&&t.formaPagamento!=='-'&&t.formaPagamento!=='');
+    const hasCliente=listV.some(t=>t.cid);
+    const hasAnexo=listV.some(t=>t.anexoUrl);
+    const recorrenciasAtivas=(data.recorrencias||[]).filter(r=>r.ativo);
+    const recorrenciasJaGeradas=mesTx.some(t=>t.origem==='recorrencia');
+    const allListIds=listV.map(t=>t.id);
+    const allSelected=allListIds.length>0&&allListIds.every(id=>selectedIds.has(id));
+    const toggleAll=()=>{if(allSelected)setSelectedIds(new Set());else setSelectedIds(new Set(allListIds))};
+    const toggleOne=id=>{const n=new Set(selectedIds);if(n.has(id))n.delete(id);else n.add(id);setSelectedIds(n)};
+    const bulkMarkPaid=()=>{const ids=selectedIds;const td=today();setData(p=>({...p,transacoes:p.transacoes.map(t=>ids.has(t.id)?{...t,status:'pago',dataPagamento:t.dataPagamento||td}:t)}));showT(`${ids.size} marcada${ids.size===1?'':'s'} como paga${ids.size===1?'':'s'}`);setSelectedIds(new Set())};
+    const bulkDelete=()=>{const ids=selectedIds;if(!confirm(`Excluir ${ids.size} transacao${ids.size===1?'':'oes'}?`))return;setData(p=>({...p,transacoes:p.transacoes.filter(t=>!ids.has(t.id))}));showT(`${ids.size} excluida${ids.size===1?'':'s'}`);setSelectedIds(new Set())};
+    const clearFiltros=()=>{setFT('todos');setFi('todos');setFCat('todas')};
+    const filtrosAtivos=fTipo!=='todos'||filter!=='todos'||fCat!=='todas';
     return(<>
       <div className="page-top" style={$.top}>
         <div>
@@ -1372,7 +1402,7 @@ function App({initialData,session,onLogout}){
           {finTab==='cobrancas'&&<div style={$.sub}>{naoPagas.length} pendente{naoPagas.length===1?'':'s'} · {vencidas.length} vencida{vencidas.length===1?'':'s'} · {fc(pendentesTotal)} a receber</div>}
         </div>
         <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-          {finTab==='visao'?(<><button style={$.btnP} onClick={()=>{setEI(null);setModal('receita')}}>{I.plus} Receita</button><button style={$.btnP} onClick={()=>{setEI(null);setModal('despesa')}}>{I.plus} Despesa</button><button style={{...$.btn,padding:'7px 12px',fontSize:'0.72rem'}} onClick={gerarRecorrencias} title="Gerar recorrências do mês">{I.repeat} Gerar recorrências</button></>):(vencidas.length>0&&<button style={{...$.btnP,background:er,borderColor:er}} onClick={()=>cobrarLote(vencidas)}>{I.wa} Cobrar {vencidas.length} vencida{vencidas.length===1?'':'s'}</button>)}
+          {finTab==='visao'?(<><button style={$.btnP} onClick={()=>{setEI(null);setModal('receita')}}>{I.plus} Receita</button><button style={$.btnDg} onClick={()=>{setEI(null);setModal('despesa')}}>{I.plus} Despesa</button>{!recorrenciasJaGeradas&&recorrenciasAtivas.length>0&&<button style={$.btnSec} onClick={gerarRecorrencias} title="Gerar recorrências do mês">{I.repeat} Gerar recorrências ({recorrenciasAtivas.length})</button>}</>):(vencidas.length>0&&<button style={{...$.btnP,background:er,borderColor:er}} onClick={()=>cobrarLote(vencidas)}>{I.wa} Cobrar {vencidas.length} vencida{vencidas.length===1?'':'s'}</button>)}
         </div>
       </div>
       <div className="page-body" style={$.body}>
@@ -1382,19 +1412,95 @@ function App({initialData,session,onLogout}){
         </div>
         {finTab==='visao'?(<>
           <PS y={sY} m={sM} onChange={setP}/>
+          {noPriorData&&<div style={{padding:'8px 12px',marginBottom:12,fontSize:'0.68rem',color:tL,background:'var(--hover)',border:`1px solid ${bd}`,borderRadius:8,textAlign:'center'}}>Sem dados de mês anterior para comparar</div>}
           <div className="kpi-grid" style={$.kg}>
             <FKpi lb="Receita" val={fc(recTot)} sub={recSum===0&&recPend===0?'sem receitas':recPend===0?'tudo recebido':(<div style={{display:'flex',flexDirection:'column',gap:1,width:'100%',lineHeight:1.3}}><span style={{color:g,fontWeight:600}}>{fc(recSum)} recebidas</span><span style={{color:wn,fontWeight:600}}>{fc(recPend)} a receber</span></div>)} cmp={cmpLine(recTot,recTotP,true)} color={g} pts={recPts}/>
             <FKpi lb="Despesa" val={fc(despTot)} sub={despSum===0&&despPend===0?'sem despesas':despPend===0?'tudo pago':(<div style={{display:'flex',flexDirection:'column',gap:1,width:'100%',lineHeight:1.3}}><span style={{color:g,fontWeight:600}}>{fc(despSum)} pagas</span><span style={{color:er,fontWeight:600}}>{fc(despPend)} a pagar</span></div>)} cmp={cmpLine(despTot,despTotP,false)} color={er} pts={despPts}/>
-            <FKpi lb="Saldo" val={fc(saldo)} sub={saldoSub} cmp={cmpLine(saldo,saldoP,true)} color={saldoColor} valColor={saldoColor} pts={salPts}/>
+            <FKpi lb="Saldo" val={fc(saldo)} sub={saldoSub} cmp={cmpLine(saldo,saldoP,true)} color={inf} valColor={saldoColor} pts={salPts}/>
             <FKpi lb="Lucro" val={fc(lucro)} sub="receita - despesa" cmp={cmpLine(lucro,lucroP,true)} color={wn} valColor={lucro>=0?g:er} pts={hist.map(h=>h.r-h.de)}/>
           </div>
           <div style={$.sw}><span style={$.si}>{I.search}</span><input style={$.sinp} placeholder="Buscar em todos os meses..." value={search} onChange={e=>setSr(e.target.value)}/></div>
           {search&&<div style={{fontSize:'0.62rem',color:inf,fontWeight:600,marginBottom:8,marginTop:-8,paddingLeft:4}}>Buscando em todos os meses ({fTx.length} resultado{fTx.length!==1?'s':''})</div>}
-          <div className="filter-row"><span className="fr-label">Tipo</span><div className="seg-tabs compact">{[{k:'todos',lb:'Todos',cor:null},{k:'receita',lb:'Receitas',cor:g},{k:'despesa',lb:'Despesas',cor:er}].map(f=>{const cnt=f.k==='todos'?fTx.length:fTx.filter(t=>t.tipo===f.k).length;return<button key={f.k} className={fTipo===f.k?'on':''} onClick={()=>setFT(f.k)}>{f.cor&&<span className="dot" style={{background:f.cor}}/>}<span>{f.lb}</span><span className="cnt">{cnt}</span></button>})}</div></div>
-          <div className="filter-row"><span className="fr-label">Status</span><div className="seg-tabs compact">{[{k:'todos',lb:'Todos',cor:null},{k:'pago',lb:'Pago',cor:g},{k:'pendente',lb:'Pendente',cor:wn}].map(f=>{const cnt=f.k==='todos'?fTx.length:fTx.filter(t=>t.status===f.k).length;return<button key={f.k} className={filter===f.k?'on':''} onClick={()=>setFi(f.k)}>{f.cor&&<span className="dot" style={{background:f.cor}}/>}<span>{f.lb}</span><span className="cnt">{cnt}</span></button>})}</div></div>
-          {catsMes.length>0&&<div className="filter-row"><span className="fr-label">Categoria</span><div className="seg-tabs compact"><button className={fCat==='todas'?'on':''} onClick={()=>setFCat('todas')}><span>Todas</span><span className="cnt">{fTx.length}</span></button>{catsMes.map(c=><button key={c} className={fCat===c?'on':''} onClick={()=>setFCat(c)}><span>{c}</span><span className="cnt">{fTx.filter(t=>t.cat===c).length}</span></button>)}</div></div>}
+          <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginBottom:12}}>
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              <label style={{fontSize:'0.6rem',color:tM,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em'}}>Tipo</label>
+              <select style={{padding:'5px 8px',fontSize:'0.74rem',border:`1px solid ${bd}`,borderRadius:6,background:'var(--surface)',color:'var(--text)',fontFamily:'inherit',cursor:'pointer'}} value={fTipo} onChange={e=>setFT(e.target.value)}>
+                <option value="todos">Todos</option>
+                <option value="receita">Receitas</option>
+                <option value="despesa">Despesas</option>
+              </select>
+            </div>
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              <label style={{fontSize:'0.6rem',color:tM,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em'}}>Status</label>
+              <select style={{padding:'5px 8px',fontSize:'0.74rem',border:`1px solid ${bd}`,borderRadius:6,background:'var(--surface)',color:'var(--text)',fontFamily:'inherit',cursor:'pointer'}} value={filter} onChange={e=>setFi(e.target.value)}>
+                <option value="todos">Todos</option>
+                <option value="pago">Pago</option>
+                <option value="pendente">Pendente</option>
+              </select>
+            </div>
+            {catsMes.length>0&&<div style={{display:'flex',gap:6,alignItems:'center'}}>
+              <label style={{fontSize:'0.6rem',color:tM,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em'}}>Categoria</label>
+              <select style={{padding:'5px 8px',fontSize:'0.74rem',border:`1px solid ${bd}`,borderRadius:6,background:'var(--surface)',color:'var(--text)',fontFamily:'inherit',cursor:'pointer'}} value={fCat} onChange={e=>setFCat(e.target.value)}>
+                <option value="todas">Todas</option>
+                {catsMes.map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>}
+            {filtrosAtivos&&<button style={{...$.btnS,fontSize:'0.66rem',padding:'5px 10px'}} onClick={clearFiltros}>Limpar filtros</button>}
+            <div style={{marginLeft:'auto',fontSize:'0.7rem',color:tL,fontWeight:600}}>{listV.length} resultado{listV.length===1?'':'s'}</div>
+          </div>
           {!isDesktop&&listV.length>0&&<div className="filter-row"><span className="fr-label">Ordenar</span><div className="seg-tabs compact">{[{k:'data',lb:'Data'},{k:'valor',lb:'Valor'},{k:'cat',lb:'Categoria'},{k:'desc',lb:'Descrição'}].map(o=><button key={o.k} className={sortBy===o.k?'on':''} onClick={()=>sortClick(o.k)}><span>{o.lb}</span>{sortBy===o.k&&<span className="cnt">{sortDir==='asc'?'↑':'↓'}</span>}</button>)}</div></div>}
-          {listV.length===0?(<div style={{textAlign:'center',padding:'50px 20px'}}><div style={{width:48,height:48,borderRadius:14,background:search?'linear-gradient(135deg,var(--alert-warm2),var(--warn-bg2))':'linear-gradient(135deg,var(--accent-light),var(--accent-light))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1.4rem',margin:'0 auto 12px',opacity:0.8}}>{search?I.search:I.dollar}</div><div style={{fontSize:'0.88rem',fontWeight:600,color:'var(--text)',marginBottom:4}}>{search?`Sem resultados para "${search}"`:fTipo!=='todos'||filter!=='todos'||fCat!=='todas'?'Nada com esses filtros':`Sem transações em ${ml(sY,sM).toLowerCase()}`}</div><div style={{fontSize:'0.68rem',color:tM,marginBottom:14}}>{search?'Tente outro termo':fTipo!=='todos'||filter!=='todos'||fCat!=='todas'?'Ajuste os filtros para ver mais':'Adicione sua primeira receita ou despesa'}</div>{search?<button style={{...$.btn,fontSize:'0.72rem',padding:'8px 16px'}} onClick={()=>setSr('')}>Limpar busca</button>:fTipo!=='todos'||filter!=='todos'||fCat!=='todas'?<button style={{...$.btn,fontSize:'0.72rem',padding:'8px 16px'}} onClick={()=>{setFT('todos');setFi('todos');setFCat('todas')}}>Limpar filtros</button>:<div style={{display:'flex',gap:8,justifyContent:'center'}}><button style={{...$.btnP,fontSize:'0.72rem',padding:'8px 16px'}} onClick={()=>{setEI(null);setModal('receita')}}>{I.plus} Receita</button><button style={{...$.btnP,fontSize:'0.72rem',padding:'8px 16px'}} onClick={()=>{setEI(null);setModal('despesa')}}>{I.plus} Despesa</button></div>}</div>):isDesktop?(<table className="desk-table"><thead><tr><th style={{cursor:'pointer',userSelect:'none'}} onClick={()=>sortClick('data')}>Data{sortArrow('data')}</th><th style={{cursor:'pointer',userSelect:'none'}} onClick={()=>sortClick('cat')}>Categoria{sortArrow('cat')}</th><th>Forma</th><th style={{cursor:'pointer',userSelect:'none'}} onClick={()=>sortClick('desc')}>Descrição{sortArrow('desc')}</th><th className="num" style={{cursor:'pointer',userSelect:'none'}} onClick={()=>sortClick('valor')}>Valor{sortArrow('valor')}</th><th style={{cursor:'pointer',userSelect:'none'}} onClick={()=>sortClick('status')}>Status{sortArrow('status')}</th></tr></thead><tbody>{listV.map(t=>(<tr key={t.id} onClick={()=>{setEI(t);setModal(t.tipo==='receita'?'receita':'despesa')}}><td style={{color:tL,fontSize:'0.72rem'}}>{fd(t.data)}</td><td style={{color:tL,fontSize:'0.72rem'}}>{t.cat||'-'}</td><td style={{color:tL,fontSize:'0.72rem'}}>{t.formaPagamento||'-'}</td><td style={{fontWeight:500}}>{t.desc}</td><td className="num" style={{fontWeight:700,color:t.tipo==='receita'?g:er}}>{t.tipo==='despesa'?'- ':''}{fc(t.valor)}</td><td><span className="badge" style={$.badge(t.status)}>{t.status}</span></td></tr>))}</tbody><tfoot><tr><td colSpan={4} style={{textAlign:'right',padding:'10px 16px',fontWeight:700,fontSize:'0.7rem',color:tL,borderTop:`1px solid ${bd}`}}>Total filtrado:</td><td className="num" style={{padding:'10px 16px',fontWeight:700,fontSize:'0.78rem',color:totalFiltrado>=0?g:er,borderTop:`1px solid ${bd}`}}>{totalFiltrado<0?'- ':''}{fc(Math.abs(totalFiltrado))}</td><td style={{borderTop:`1px solid ${bd}`}}></td></tr></tfoot></table>):(<>{listV.map(t=>(<div key={t.id} style={$.tr} onClick={()=>{setEI(t);setModal(t.tipo==='receita'?'receita':'despesa')}}><div style={{width:32,height:32,borderRadius:8,background:t.tipo==='receita'?gL:eB,color:t.tipo==='receita'?g:er,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{t.tipo==='receita'?I.dollar:I.card}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:'0.85rem',fontWeight:600,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',lineHeight:1.25}}>{t.desc||(t.tipo==='receita'?'Receita':'Despesa')}</div><div style={{fontSize:'0.66rem',color:tM,fontWeight:400,marginTop:2}}>{fd(t.data)}{t.cat?` · ${t.cat}`:''}{t.formaPagamento?` · ${t.formaPagamento}`:''}</div></div><div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:'0.8rem',fontWeight:600,color:t.tipo==='receita'?g:er}}>{t.tipo==='despesa'?'- ':''}{fc(t.valor)}</div><span style={$.badge(t.status)}>{t.status}</span></div><div style={{color:bd,flexShrink:0,marginLeft:4}}>{I.chevR}</div></div>))}<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',marginTop:8,borderTop:`1px solid ${bd}`,fontSize:'0.74rem',fontWeight:700}}><span style={{color:tL}}>Total filtrado</span><span style={{color:totalFiltrado>=0?g:er}}>{totalFiltrado<0?'- ':''}{fc(Math.abs(totalFiltrado))}</span></div></>)}
+          {selectedIds.size>0&&<div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',marginBottom:8,background:'var(--info-bg)',border:`1px solid ${inf}`,borderRadius:8,flexWrap:'wrap'}}>
+            <span style={{fontSize:'0.78rem',fontWeight:700,color:inf}}>{selectedIds.size} selecionada{selectedIds.size===1?'':'s'}</span>
+            <button style={{...$.btnS,color:g,borderColor:g,fontWeight:700}} onClick={bulkMarkPaid}>Marcar como pago</button>
+            <button style={{...$.btnS,color:er,borderColor:er,fontWeight:700}} onClick={bulkDelete}>Excluir selecionadas</button>
+            <button style={{...$.btnS,marginLeft:'auto'}} onClick={()=>setSelectedIds(new Set())}>Cancelar</button>
+          </div>}
+          {listV.length===0?(<div style={{textAlign:'center',padding:'50px 20px'}}><div style={{width:48,height:48,borderRadius:14,background:search?'linear-gradient(135deg,var(--alert-warm2),var(--warn-bg2))':'linear-gradient(135deg,var(--accent-light),var(--accent-light))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1.4rem',margin:'0 auto 12px',opacity:0.8}}>{search?I.search:I.dollar}</div><div style={{fontSize:'0.88rem',fontWeight:600,color:'var(--text)',marginBottom:4}}>{search?`Sem resultados para "${search}"`:filtrosAtivos?'Nada com esses filtros':`Sem transações em ${ml(sY,sM).toLowerCase()}`}</div><div style={{fontSize:'0.68rem',color:tM,marginBottom:14}}>{search?'Tente outro termo':filtrosAtivos?'Ajuste os filtros para ver mais':'Adicione sua primeira receita ou despesa'}</div>{search?<button style={{...$.btn,fontSize:'0.72rem',padding:'8px 16px'}} onClick={()=>setSr('')}>Limpar busca</button>:filtrosAtivos?<button style={{...$.btn,fontSize:'0.72rem',padding:'8px 16px'}} onClick={clearFiltros}>Limpar filtros</button>:<div style={{display:'flex',gap:8,justifyContent:'center'}}><button style={{...$.btnP,fontSize:'0.72rem',padding:'8px 16px'}} onClick={()=>{setEI(null);setModal('receita')}}>{I.plus} Receita</button><button style={{...$.btnDg,fontSize:'0.72rem',padding:'8px 16px'}} onClick={()=>{setEI(null);setModal('despesa')}}>{I.plus} Despesa</button></div>}</div>):isDesktop?(()=>{
+            const beforeValor=4+(hasForma?1:0)+(hasCliente?1:0);
+            const afterValor=2+(hasAnexo?1:0);
+            return(<table className="desk-table"><thead><tr>
+              <th style={{width:36}}><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Selecionar todos"/></th>
+              <th style={{cursor:'pointer',userSelect:'none'}} onClick={()=>sortClick('data')}>Data{sortArrow('data')}</th>
+              <th style={{cursor:'pointer',userSelect:'none'}} onClick={()=>sortClick('cat')}>Categoria{sortArrow('cat')}</th>
+              {hasForma&&<th>Forma</th>}
+              {hasCliente&&<th>Cliente</th>}
+              <th style={{cursor:'pointer',userSelect:'none'}} onClick={()=>sortClick('desc')}>Descrição{sortArrow('desc')}</th>
+              <th className="num" style={{cursor:'pointer',userSelect:'none'}} onClick={()=>sortClick('valor')}>Valor{sortArrow('valor')}</th>
+              <th>Pago em</th>
+              {hasAnexo&&<th>Anexo</th>}
+              <th style={{cursor:'pointer',userSelect:'none'}} onClick={()=>sortClick('status')}>Status{sortArrow('status')}</th>
+            </tr></thead><tbody>{listV.map(t=>{const checked=selectedIds.has(t.id);return(<tr key={t.id} onClick={()=>{setEI(t);setModal(t.tipo==='receita'?'receita':'despesa')}} style={checked?{background:'var(--info-bg)'}:undefined}>
+              <td onClick={e=>e.stopPropagation()}><input type="checkbox" checked={checked} onChange={()=>toggleOne(t.id)} aria-label="Selecionar"/></td>
+              <td style={{color:tL,fontSize:'0.72rem'}}>{fd(t.data)}</td>
+              <td style={{fontSize:'0.72rem'}}><CatChip cat={t.cat}/></td>
+              {hasForma&&<td style={{color:tL,fontSize:'0.72rem'}}>{t.formaPagamento||'-'}</td>}
+              {hasCliente&&<td style={{color:tL,fontSize:'0.72rem'}}>{t.cid?(clienteNomeById[t.cid]||'-'):'-'}</td>}
+              <td style={{fontWeight:500}}>{t.desc}</td>
+              <td className="num" style={{fontWeight:700,color:t.tipo==='receita'?g:er}}>{t.tipo==='despesa'?'- ':''}{fc(t.valor)}</td>
+              <td style={{color:tL,fontSize:'0.72rem'}}>{t.dataPagamento?fd(t.dataPagamento):'-'}</td>
+              {hasAnexo&&<td onClick={e=>e.stopPropagation()}>{t.anexoUrl?<a href={t.anexoUrl} target="_blank" rel="noopener noreferrer" style={{textDecoration:'none',fontSize:'1rem'}} title={t.anexoUrl}>📎</a>:<span style={{color:tM}}>-</span>}</td>}
+              <td><span className="badge" style={$.badge(t.status)}>{t.status}</span></td>
+            </tr>)})}</tbody><tfoot><tr><td colSpan={beforeValor} style={{textAlign:'right',padding:'10px 16px',fontWeight:700,fontSize:'0.7rem',color:tL,borderTop:`1px solid ${bd}`}}>Total filtrado:</td><td className="num" style={{padding:'10px 16px',fontWeight:700,fontSize:'0.78rem',color:totalFiltrado>=0?g:er,borderTop:`1px solid ${bd}`}}>{totalFiltrado<0?'- ':''}{fc(Math.abs(totalFiltrado))}</td><td colSpan={afterValor} style={{borderTop:`1px solid ${bd}`}}></td></tr></tfoot></table>)
+          })():(<>{listV.map(t=>{const checked=selectedIds.has(t.id);return(<div key={t.id} style={{...$.tr,background:checked?'var(--info-bg)':undefined}} onClick={()=>{setEI(t);setModal(t.tipo==='receita'?'receita':'despesa')}}>
+            <div onClick={e=>{e.stopPropagation();toggleOne(t.id)}} style={{flexShrink:0,display:'flex',alignItems:'center'}}><input type="checkbox" checked={checked} onChange={()=>{}} aria-label="Selecionar"/></div>
+            <div style={{width:32,height:32,borderRadius:8,background:t.tipo==='receita'?gL:eB,color:t.tipo==='receita'?g:er,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{t.tipo==='receita'?I.dollar:I.card}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:'0.85rem',fontWeight:600,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',lineHeight:1.25}}>{t.desc||(t.tipo==='receita'?'Receita':'Despesa')}</div>
+              <div style={{fontSize:'0.66rem',color:tM,fontWeight:400,marginTop:2,display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
+                <span>{fd(t.data)}</span>
+                {t.cat&&<><span>·</span><CatChip cat={t.cat}/></>}
+                {hasCliente&&t.cid&&clienteNomeById[t.cid]&&<><span>·</span><span>{clienteNomeById[t.cid]}</span></>}
+                {hasForma&&t.formaPagamento&&<><span>·</span><span>{t.formaPagamento}</span></>}
+                {t.dataPagamento&&<><span>·</span><span>pago em {fd(t.dataPagamento)}</span></>}
+              </div>
+            </div>
+            <div style={{textAlign:'right',flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
+              <div style={{fontSize:'0.8rem',fontWeight:600,color:t.tipo==='receita'?g:er}}>{t.tipo==='despesa'?'- ':''}{fc(t.valor)}</div>
+              <span style={$.badge(t.status)}>{t.status}</span>
+              {t.anexoUrl&&<a href={t.anexoUrl} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{textDecoration:'none',fontSize:'0.85rem'}} title="Anexo">📎</a>}
+            </div>
+            <div style={{color:bd,flexShrink:0,marginLeft:4}}>{I.chevR}</div>
+          </div>)})}<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',marginTop:8,borderTop:`1px solid ${bd}`,fontSize:'0.74rem',fontWeight:700}}><span style={{color:tL}}>Total filtrado</span><span style={{color:totalFiltrado>=0?g:er}}>{totalFiltrado<0?'- ':''}{fc(Math.abs(totalFiltrado))}</span></div></>)}
         </>):(<>
           <div className="kpi-grid" style={$.kg}>
             <CKpi lb="Pago no mês" val={fc(pagoAtual)} sub={`${pagas} de ${cobList.length} cobranças`} delta={deltaPago} pts={cobMrrHist} color={g}/>
@@ -1952,17 +2058,19 @@ function App({initialData,session,onLogout}){
       </div>
     </div></div>)};
 
-  const MTx=({tipo})=>{const cats=tipo==='receita'?CR:CD;const[f,setF]=useState(editItem||{tipo,cat:cats[0],desc:'',valor:tipo==='receita'?268:0,data:today(),cid:null,status:'pago'});const set=(k,v)=>setF({...f,[k]:v});const close=()=>{setModal(null);setEI(null)};return(
+  const MTx=({tipo})=>{const cats=tipo==='receita'?CR:CD;const[f,setF]=useState(editItem||{tipo,cat:cats[0],desc:'',valor:tipo==='receita'?268:0,data:today(),cid:null,status:'pago',anexoUrl:'',dataPagamento:null});const set=(k,v)=>setF({...f,[k]:v});const setStatus=v=>{setF(p=>{const next={...p,status:v};if(v==='pago'&&!p.dataPagamento)next.dataPagamento=today();if(v!=='pago')next.dataPagamento=null;return next})};const close=()=>{setModal(null);setEI(null)};const save=()=>{if(!f.desc||!f.valor)return;const prevStatus=editItem?.status;let out={...f};if(prevStatus!=='pago'&&out.status==='pago'&&!out.dataPagamento)out.dataPagamento=today();if(prevStatus==='pago'&&out.status!=='pago')out.dataPagamento=null;editItem?updT(out):addT(out)};return(
     <div className="modal-overlay" style={$.ov} onClick={close} role="dialog" aria-modal="true"><div className="modal-box" style={$.mod} onClick={e=>e.stopPropagation()}>
       <div style={$.grab}/><div style={$.mh}><div style={{fontFamily:"'Bricolage Grotesque',Georgia,serif",fontSize:'1.1rem',fontWeight:700}}>{editItem?'Editar':'Nova'} {tipo==='receita'?'Receita':'Despesa'}</div><button style={{border:'none',background:'none',cursor:'pointer',color:tL}} onClick={close} aria-label="Fechar">{I.x}</button></div>
       <div style={$.mb}>
-        <div style={{...$.row,marginBottom:12}}><div><div style={$.lbl}>Categoria</div><select style={$.inp} value={f.cat} onChange={e=>set('cat',e.target.value)}>{cats.map(c=><option key={c}>{c}</option>)}</select></div><div><div style={$.lbl}>Data</div><input style={$.inp} type="date" value={f.data} onChange={e=>set('data',e.target.value)}/></div></div>
+        <div style={{...$.row,marginBottom:12}}><div><div style={$.lbl}>Categoria</div><select style={$.inp} value={f.cat} onChange={e=>set('cat',e.target.value)}>{cats.map(c=><option key={c}>{c}</option>)}</select></div><div><div style={$.lbl}>Vencimento</div><input style={$.inp} type="date" value={f.data} onChange={e=>set('data',e.target.value)}/></div></div>
         <div style={{marginBottom:12}}><div style={$.lbl}>Descrição *</div><input style={$.inp} value={f.desc} onChange={e=>set('desc',e.target.value)}/></div>
-        <div style={{...$.row,marginBottom:12}}><div><div style={$.lbl}>Valor *</div><input style={$.inp} type="number" step="0.01" value={f.valor} onChange={e=>set('valor',+e.target.value)}/></div><div><div style={$.lbl}>Status</div><select style={$.inp} value={f.status} onChange={e=>set('status',e.target.value)}><option value="pago">Pago</option><option value="pendente">Pendente</option></select></div></div>
+        <div style={{...$.row,marginBottom:12}}><div><div style={$.lbl}>Valor *</div><input style={$.inp} type="number" step="0.01" value={f.valor} onChange={e=>set('valor',+e.target.value)}/></div><div><div style={$.lbl}>Status</div><select style={$.inp} value={f.status} onChange={e=>setStatus(e.target.value)}><option value="pago">Pago</option><option value="pendente">Pendente</option></select></div></div>
+        {f.status==='pago'&&<div style={{marginBottom:12}}><div style={$.lbl}>Data de pagamento</div><input style={$.inp} type="date" value={f.dataPagamento||''} onChange={e=>set('dataPagamento',e.target.value||null)}/></div>}
         {tipo==='receita'&&<div style={{marginBottom:12}}><div style={$.lbl}>Cliente</div><select style={$.inp} value={f.cid||''} onChange={e=>set('cid',e.target.value||null)}><option value="">Nenhum</option>{data.clientes.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></div>}
+        <div style={{marginBottom:12}}><div style={$.lbl}>URL do comprovante (boleto, NF, recibo)</div><input style={$.inp} type="text" placeholder="https://..." value={f.anexoUrl||''} onChange={e=>set('anexoUrl',e.target.value)}/></div>
         {editItem&&<button style={$.btnD} onClick={()=>{close();setConfirmDel({type:'transacao',id:editItem.id,name:f.desc})}}>{I.trash} Excluir</button>}
       </div>
-      <div style={$.mf}><button style={{...$.btn,flex:1,justifyContent:'center'}} onClick={close}>Cancelar</button><button style={{...$.btnP,flex:1,justifyContent:'center'}} onClick={()=>{if(!f.desc||!f.valor)return;editItem?updT(f):addT(f)}}>{editItem?'Salvar':'Adicionar'}</button></div>
+      <div style={$.mf}><button style={{...$.btn,flex:1,justifyContent:'center'}} onClick={close}>Cancelar</button><button style={{...$.btnP,flex:1,justifyContent:'center'}} onClick={save}>{editItem?'Salvar':'Adicionar'}</button></div>
     </div></div>)};
 
   const MRec=()=>{const[f,setF]=useState(editItem||{desc:'',valor:0,tipo:'despesa',cat:CD[0],diaVenc:1,ativo:true});const set=(k,v)=>setF({...f,[k]:v});const close=()=>{setModal(null);setEI(null)};return(
