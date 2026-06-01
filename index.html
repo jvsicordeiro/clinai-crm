@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Versionado no Git em 27-05-2026 - P2-financeiro v2: 12 melhorias (cores semanticas, filtros consolidados, sparklines, cliente, anexo, vencimento vs pagamento, bulk actions, recorrencias inteligentes) -->
+<!-- Versionado no Git em 27-05-2026 - P2-financeiro v2 fix definitivo -->
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8"/>
@@ -2312,7 +2312,7 @@ function App({initialData,session,onLogout}){
   return(<div className="app-root" style={$.app}>
     {Sidebar()}
     <main className="main-wrap" id="main-content" role="main"><div className="main-inner">
-    {page==='dash'&&Dash()}{page==='clientes'&&Cli()}{page==='fin'&&Fin()}{page==='config'&&<Cfg/>}
+    {page==='dash'&&<Dash/>}{page==='clientes'&&<Cli/>}{page==='fin'&&<Fin/>}{page==='config'&&<Cfg/>}
     </div></main>
     {MCli()}{modal==='clienteDetalhe'&&<MCliDetalhe/>}{modal==='lead'&&<MLead/>}{modal==='receita'&&<MTx tipo="receita"/>}{modal==='despesa'&&<MTx tipo="despesa"/>}{modal==='recorrencia'&&<MRec/>}{MWinLead()}{MLoseLead()}
     {renderCmdPalette()}
