@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Versionado no Git em 27-05-2026 - P2-financeiro v2 fix definitivo -->
+<!-- Versionado no Git em 27-05-2026 - P2-financeiro v3 modal completo -->
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8"/>
@@ -616,6 +616,12 @@ async function sbFetch(path,opts={},token){
   if(r.status===204)return null;
   const txt=await r.text();return txt?JSON.parse(txt):null;
 }
+function jwtUid(token){try{const p=token.split('.')[1];const j=JSON.parse(atob(p.replace(/-/g,'+').replace(/_/g,'/')));return j.sub||null}catch(e){return null}}
+async function sbUpload(bucket,path,file,token){
+  const r=await fetch(`${SB_URL}/storage/v1/object/${bucket}/${encodeURIComponent(path)}`,{method:'POST',headers:{'apikey':SB_KEY,'Authorization':`Bearer ${token}`,'Content-Type':file.type||'application/octet-stream','x-upsert':'true'},body:file});
+  if(!r.ok){const t=await r.text();throw new Error(`${r.status} ${t}`);}
+  return `${SB_URL}/storage/v1/object/public/${bucket}/${path}`;
+}
 async function sbLogin(email,password){
   return sbFetch('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email,password})});
 }
@@ -694,7 +700,7 @@ async function sbLoadStateV2(token){
   ]);
   const pickTx=r=>{
     if(!r)return r;
-    const overlay={anexoUrl:r.anexo_url||null,dataPagamento:r.data_pagamento||null};
+    const overlay={anexoUrl:r.anexo_url||null,dataPagamento:r.data_pagamento||null,notas:r.notas||null,recorrente:!!r.recorrente,frequencia:r.frequencia||null};
     if(r.extra&&typeof r.extra==='object'&&Object.keys(r.extra).length)return {...r.extra,...overlay};
     return {...r,desc:r.descricao,cat:r.categoria,cid:r.cliente_id,formaPagamento:r.forma_pagamento,...overlay};
   };
@@ -760,7 +766,7 @@ function rowCliente(c){
     observacoes:c.observacoes||c.notas||null,
   };
 }
-function rowTx(t){return{id:String(t.id),tipo:t.tipo||'despesa',descricao:t.descricao||t.desc||'-',valor:Number(t.valor||0),data:t.data||new Date().toISOString().slice(0,10),categoria:t.categoria||t.cat||null,cliente_id:t.cid?String(t.cid):(t.clienteId?String(t.clienteId):null),forma_pagamento:t.formaPagamento||null,status:t.status||'pago',origem:t.origem||null,anexo_url:t.anexoUrl||null,data_pagamento:t.dataPagamento||null,extra:t}}
+function rowTx(t){return{id:String(t.id),tipo:t.tipo||'despesa',descricao:t.descricao||t.desc||'-',valor:Number(t.valor||0),data:t.data||new Date().toISOString().slice(0,10),categoria:t.categoria||t.cat||null,cliente_id:t.cid?String(t.cid):(t.clienteId?String(t.clienteId):null),forma_pagamento:t.formaPagamento||null,status:t.status||'pago',origem:t.origem||null,anexo_url:t.anexoUrl||null,data_pagamento:t.dataPagamento||null,notas:t.notas||null,recorrente:!!t.recorrente,frequencia:t.frequencia||null,extra:t}}
 function rowLead(l){return{id:String(l.id),nome:l.nome||'-',origem:l.origem||null,status:l.status||l.etapa||'novo',valor_estimado:Number(l.valorEstimado||l.valorPotencial||0)||null,motivo_perda:l.motivoPerda||l.motivo_perda||null,motivo_perda_detalhe:l.motivoPerdaDetalhe||l.motivo_perda_detalhe||null,cliente_gerado_id:l.clienteGeradoId||l.cliente_gerado_id||null,data_conversao:l.dataConversao||l.data_conversao||null,extra:l}}
 function rowRec(r){return{id:String(r.id),tipo:r.tipo||'despesa',descricao:r.descricao||'-',valor:Number(r.valor||0),dia_vencimento:r.diaVencimento||null,categoria:r.categoria||null,ativo:r.ativo!==false,extra:r}}
 function diffArr(nov,vel){
@@ -2060,19 +2066,21 @@ function App({initialData,session,onLogout}){
       </div>
     </div></div>)};
 
-  const MTx=({tipo})=>{const cats=tipo==='receita'?CR:CD;const[f,setF]=useState(editItem||{tipo,cat:cats[0],desc:'',valor:tipo==='receita'?268:0,data:today(),cid:null,status:'pago',anexoUrl:'',dataPagamento:null});const set=(k,v)=>setF({...f,[k]:v});const setStatus=v=>{setF(p=>{const next={...p,status:v};if(v==='pago'&&!p.dataPagamento)next.dataPagamento=today();if(v!=='pago')next.dataPagamento=null;return next})};const close=()=>{setModal(null);setEI(null)};const save=()=>{if(!f.desc||!f.valor)return;const prevStatus=editItem?.status;let out={...f};if(prevStatus!=='pago'&&out.status==='pago'&&!out.dataPagamento)out.dataPagamento=today();if(prevStatus==='pago'&&out.status!=='pago')out.dataPagamento=null;editItem?updT(out):addT(out)};return(
+  const MTx=({tipo})=>{const cats=tipo==='receita'?CR:CD;const FP=['Pix','Cartão de crédito','Cartão de débito','Dinheiro','Transferência','Boleto','Outro'];const[f,setF]=useState({tipo,cat:cats[0],desc:'',valor:tipo==='receita'?268:0,data:today(),cid:null,status:'pago',anexoUrl:'',anexoNome:'',dataPagamento:null,formaPagamento:'',notas:'',recorrente:false,frequencia:'Mensal',...(editItem||{})});const[uploading,setUploading]=useState(false);const fileRef=useRef(null);const set=(k,v)=>setF(p=>({...p,[k]:v}));const setStatus=v=>{setF(p=>{const next={...p,status:v};if(v==='pago'&&!p.dataPagamento)next.dataPagamento=today();if(v!=='pago')next.dataPagamento=null;return next})};const onFile=async e=>{const file=e.target.files&&e.target.files[0];e.target.value='';if(!file)return;if(file.size>5*1024*1024){showT('Arquivo grande demais (max 5MB)');return}if(!['image/jpeg','image/png','application/pdf'].includes(file.type)){showT('Tipo inválido (PDF, JPG ou PNG)');return}const uid=jwtUid(session&&session.access_token);if(!uid){showT('Sessão expirada');return}const ext=(file.name.split('.').pop()||'bin').toLowerCase();const path=`${uid}/${gid()}.${ext}`;setUploading(true);try{const url=await sbUpload('comprovantes',path,file,session.access_token);setF(p=>({...p,anexoUrl:url,anexoNome:file.name}));showT('Comprovante anexado')}catch(err){showT('Erro no upload')}finally{setUploading(false)}};const close=()=>{setModal(null);setEI(null)};const save=()=>{if(!f.desc||!f.valor)return;const prevStatus=editItem?.status;let out={...f};if(prevStatus!=='pago'&&out.status==='pago'&&!out.dataPagamento)out.dataPagamento=today();if(prevStatus==='pago'&&out.status!=='pago')out.dataPagamento=null;if(out.recorrente){const cat=out.cat||out.categoria;const dia=out.data?Math.min(+out.data.split('-')[2]||1,28):1;const existing=(data.recorrencias||[]).find(rr=>(rr.desc||rr.descricao)===out.desc&&(rr.cat||rr.categoria)===cat);const recPayload={desc:out.desc,cat,valor:out.valor,diaVenc:dia,frequencia:out.frequencia,tipo:out.tipo,ativo:true};if(existing){setData(p=>({...p,recorrencias:p.recorrencias.map(x=>x.id===existing.id?{...x,...recPayload}:x)}))}else{setData(p=>({...p,recorrencias:[...p.recorrencias,{...recPayload,id:gid()}]}))}}editItem?updT(out):addT(out)};return(
     <div className="modal-overlay" style={$.ov} onClick={close} role="dialog" aria-modal="true"><div className="modal-box" style={$.mod} onClick={e=>e.stopPropagation()}>
       <div style={$.grab}/><div style={$.mh}><div style={{fontFamily:"'Bricolage Grotesque',Georgia,serif",fontSize:'1.1rem',fontWeight:700}}>{editItem?'Editar':'Nova'} {tipo==='receita'?'Receita':'Despesa'}</div><button style={{border:'none',background:'none',cursor:'pointer',color:tL}} onClick={close} aria-label="Fechar">{I.x}</button></div>
       <div style={$.mb}>
-        <div style={{...$.row,marginBottom:12}}><div><div style={$.lbl}>Categoria</div><select style={$.inp} value={f.cat} onChange={e=>set('cat',e.target.value)}>{cats.map(c=><option key={c}>{c}</option>)}</select></div><div><div style={$.lbl}>Vencimento</div><input style={$.inp} type="date" value={f.data} onChange={e=>set('data',e.target.value)}/></div></div>
         <div style={{marginBottom:12}}><div style={$.lbl}>Descrição *</div><input style={$.inp} value={f.desc} onChange={e=>set('desc',e.target.value)}/></div>
-        <div style={{...$.row,marginBottom:12}}><div><div style={$.lbl}>Valor *</div><input style={$.inp} type="number" step="0.01" value={f.valor} onChange={e=>set('valor',+e.target.value)}/></div><div><div style={$.lbl}>Status</div><select style={$.inp} value={f.status} onChange={e=>setStatus(e.target.value)}><option value="pago">Pago</option><option value="pendente">Pendente</option></select></div></div>
-        {f.status==='pago'&&<div style={{marginBottom:12}}><div style={$.lbl}>Data de pagamento</div><input style={$.inp} type="date" value={f.dataPagamento||''} onChange={e=>set('dataPagamento',e.target.value||null)}/></div>}
-        {tipo==='receita'&&<div style={{marginBottom:12}}><div style={$.lbl}>Cliente</div><select style={$.inp} value={f.cid||''} onChange={e=>set('cid',e.target.value||null)}><option value="">Nenhum</option>{data.clientes.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></div>}
-        <div style={{marginBottom:12}}><div style={$.lbl}>URL do comprovante (boleto, NF, recibo)</div><input style={$.inp} type="text" placeholder="https://..." value={f.anexoUrl||''} onChange={e=>set('anexoUrl',e.target.value)}/></div>
-        {editItem&&<button style={$.btnD} onClick={()=>{close();setConfirmDel({type:'transacao',id:editItem.id,name:f.desc})}}>{I.trash} Excluir</button>}
+        <div style={{...$.row,marginBottom:12}}><div><div style={$.lbl}>Valor *</div><input style={$.inp} type="number" step="0.01" value={f.valor} onChange={e=>set('valor',+e.target.value)}/></div><div><div style={$.lbl}>Vencimento</div><input style={$.inp} type="date" value={f.data} onChange={e=>set('data',e.target.value)}/></div></div>
+        <div style={{...$.row,marginBottom:12}}><div><div style={$.lbl}>Status</div><select style={$.inp} value={f.status} onChange={e=>setStatus(e.target.value)}><option value="pago">Pago</option><option value="pendente">Pendente</option></select></div><div>{f.status==='pago'&&<><div style={$.lbl}>Data de pagamento</div><input style={$.inp} type="date" value={f.dataPagamento||''} onChange={e=>set('dataPagamento',e.target.value||null)}/></>}</div></div>
+        <div style={{...$.row,marginBottom:12}}><div><div style={$.lbl}>Forma de pagamento</div><select style={$.inp} value={f.formaPagamento||''} onChange={e=>set('formaPagamento',e.target.value||null)}><option value="">Nenhuma</option>{FP.map(x=><option key={x}>{x}</option>)}</select></div><div><div style={$.lbl}>Categoria</div><select style={$.inp} value={f.cat} onChange={e=>set('cat',e.target.value)}>{cats.map(c=><option key={c}>{c}</option>)}</select></div></div>
+        {tipo==='receita'&&<div style={{marginBottom:12}}><div style={$.lbl}>Cliente</div><select style={$.inp} value={f.cid||''} onChange={e=>set('cid',e.target.value||null)}><option value="">Nenhum</option>{data.clientes.filter(c=>c.status==='ativo').map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></div>}
+        <div style={{...$.row,marginBottom:12}}><div><div style={$.lbl}>Recorrente</div><select style={$.inp} value={f.recorrente?'sim':'nao'} onChange={e=>set('recorrente',e.target.value==='sim')}><option value="nao">Não</option><option value="sim">Sim</option></select></div><div>{f.recorrente&&<><div style={$.lbl}>Frequência</div><select style={$.inp} value={f.frequencia||'Mensal'} onChange={e=>set('frequencia',e.target.value)}><option value="Mensal">Mensal</option><option value="Trimestral">Trimestral</option><option value="Anual">Anual</option></select></>}</div></div>
+        <div style={{marginBottom:12}}><div style={$.lbl}>Notas</div><textarea style={{...$.inp,minHeight:64,resize:'vertical',fontFamily:'inherit'}} maxLength={500} placeholder="Opcional" value={f.notas||''} onChange={e=>set('notas',e.target.value)}/><div style={{fontSize:'0.62rem',color:tM,textAlign:'right',marginTop:2}}>{(f.notas||'').length}/500</div></div>
+        <div style={{marginBottom:12}}><div style={$.lbl}>Comprovante</div>{f.anexoUrl?<div style={{display:'flex',alignItems:'center',gap:8,fontSize:'0.72rem',padding:'8px 10px',background:'var(--subtle)',borderRadius:6}}><a href={f.anexoUrl} target="_blank" rel="noopener noreferrer" style={{color:'var(--accent)',textDecoration:'underline',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.anexoNome||'Comprovante atual'}</a><button style={$.pto} onClick={()=>fileRef.current&&fileRef.current.click()}>Trocar</button><button style={$.pto} onClick={()=>setF(p=>({...p,anexoUrl:'',anexoNome:''}))}>Remover</button></div>:<button style={{...$.btn,width:'100%',justifyContent:'center'}} onClick={()=>fileRef.current&&fileRef.current.click()} disabled={uploading}>{uploading?'Enviando...':'Anexar PDF, JPG ou PNG (max 5MB)'}</button>}<input ref={fileRef} type="file" accept="image/jpeg,image/png,application/pdf" style={{display:'none'}} onChange={onFile}/></div>
       </div>
-      <div style={$.mf}><button style={{...$.btn,flex:1,justifyContent:'center'}} onClick={close}>Cancelar</button><button style={{...$.btnP,flex:1,justifyContent:'center'}} onClick={save}>{editItem?'Salvar':'Adicionar'}</button></div>
+      <div style={$.mf}><button style={{...$.btn,flex:1,justifyContent:'center'}} onClick={close}>Cancelar</button><button style={{...$.btnP,flex:1,justifyContent:'center'}} onClick={save} disabled={uploading}>{editItem?'Salvar':'Adicionar'}</button></div>
+      {editItem&&<div style={{padding:'8px 16px 16px',borderTop:`1px solid ${bd}`}}><button style={{...$.btnD,width:'100%',justifyContent:'center'}} onClick={()=>{close();setConfirmDel({type:'transacao',id:editItem.id,name:f.desc})}}>{I.trash} Excluir transação</button></div>}
     </div></div>)};
 
   const MRec=()=>{const[f,setF]=useState(editItem||{desc:'',valor:0,tipo:'despesa',cat:CD[0],diaVenc:1,ativo:true});const set=(k,v)=>setF({...f,[k]:v});const close=()=>{setModal(null);setEI(null)};return(
